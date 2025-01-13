@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+
+import glob
+import os
+import errno
+import subprocess
+import sys
+
+def add_pipx_venvs_bin_to_path():
+    """
+    Adds available pipx virtual environments bin directories to PATH.
+    This function looks for venv in ~/.local/pipx/venvs/ramalama/bin and
+    if it exists appends it to the environment variable PATH.
+    """
+    pipx_bin_path = os.path.expanduser(f'~/.local/pipx/venvs/ramalama/bin')
+    if os.path.exists(pipx_bin_path):
+        os.environ["PATH"] += ":" + pipx_bin_path
+
+def add_site_packages_to_syspath(base_path):
+    """
+    Adds site-packages directories from a given base path to sys.path.
+    """
+    python_version = f'{sys.version_info.major}.{sys.version_info.minor}'
+    search_pattern = os.path.expanduser(f'{base_path}/lib/python{python_version}/site-packages')
+    matched_paths = glob.glob(search_pattern)
+    if matched_paths:
+        for path in matched_paths:
+            sys.path.insert(0, path)
+        return
+
+    # Fallback to a more general pattern if the specific version doesn't match
+    search_pattern = os.path.expanduser(f'{base_path}/lib/python*/site-packages')
+    matched_paths = glob.glob(search_pattern)
+    if matched_paths:
+        for path in matched_paths:
+            sys.path.insert(0, path)
+
+def main(args):
+    sharedirs = ["/opt/homebrew/share/ramalama", "/usr/local/share/ramalama", "/usr/share/ramalama"]
+    syspath = next((d for d in sharedirs if os.path.exists(d+"/ramalama/cli.py")), None)
+    if syspath:
+        sys.path.insert(0, syspath)
+
+    add_site_packages_to_syspath('~/.local/pipx/venvs/*')
+    add_site_packages_to_syspath('/usr/local')
+    add_pipx_venvs_bin_to_path()
+    sys.path.insert(0, './')
+    try:
+        import ramalama
+    except:
+        print(f"ramalama module not found in sys.path: {sys.path}", file=sys.stderr)
+        raise
+
+    parser, args = ramalama.init_cli()
+
+    # if autocomplete doesn't exist, just do nothing, don't break
+    try:
+        import argcomplete
+        argcomplete.autocomplete(parser)
+    except Exception:
+        None
+
+    if args.version:
+        return ramalama.print_version(args)
+
+    def eprint(e, exit_code):
+        ramalama.perror("Error: " + str(e).strip("'\""))
+        sys.exit(exit_code)
+
+    # Process CLI
+    try:
+        args.func(args)
+    except ramalama.HelpException:
+        parser.print_help()
+    except AttributeError as e:
+        parser.print_usage()
+        print("ramalama: requires a subcommand")
+        if args.debug:
+            raise e
+    except IndexError as e:
+        eprint(e, errno.EINVAL)
+    except KeyError as e:
+        eprint(e, 1)
+    except NotImplementedError as e:
+        eprint(e, errno.ENOTSUP)
+    except subprocess.CalledProcessError as e:
+        eprint(e, e.returncode)
+    except KeyboardInterrupt:
+        sys.exit(0)
+    except ValueError as e:
+        eprint(e, errno.EINVAL)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
