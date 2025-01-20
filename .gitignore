@@ -1,0 +1,14 @@
+ramalama/__pycache__
+docs/*.1
+docs/*.5
+build
+*.egg-info
+*.dist
+*.patch
+ramalama/*.patch
+dist
+.#*
+venv/
+*.container
+*.image
+*.volume
